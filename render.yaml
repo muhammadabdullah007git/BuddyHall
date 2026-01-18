@@ -1,0 +1,11 @@
+services:
+  - type: web
+    name: buddy-hall
+    env: node
+    plan: free
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    branch: main
+    envVars:
+      - key: NODE_VERSION
+        value: 20.9.0
