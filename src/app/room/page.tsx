@@ -471,6 +471,22 @@ function RoomPageContent() {
                         {isCreator && <span className={styles.hostBadge}>HOST</span>}
                     </div>
                     <p className={styles.participantCount}>{participants.length} buddies online</p>
+                    <button
+                        onClick={() => router.push('/')}
+                        style={{
+                            marginTop: '10px',
+                            background: 'rgba(239, 68, 68, 0.2)',
+                            border: '1px solid rgba(239, 68, 68, 0.5)',
+                            color: '#fca5a5',
+                            padding: '5px 10px',
+                            borderRadius: '5px',
+                            cursor: 'pointer',
+                            fontSize: '0.8rem',
+                            width: '100%'
+                        }}
+                    >
+                        ← Leave Room
+                    </button>
                 </div>
 
                 <div className={styles.participantsSection}>

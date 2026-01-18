@@ -23,13 +23,13 @@ function createWindow() {
     // For now, we'll load the local dev server during development
     // In production, we'll need a way to point to the remote server or local static files
 
-    const startUrl = isDev
+    const startUrl = isDev && !app.isPackaged
         ? 'http://localhost:3000'
-        : `file://${path.join(__dirname, '.next/server/pages/index.html')}`; // Validating build path later
+        : `file://${path.join(__dirname, 'out/index.html')}`;
 
     // We actually want a "Connection" page first if no URL is saved.
     // For this first step, let's just get the window opening.
-    mainWindow.loadURL('http://localhost:3000');
+    mainWindow.loadURL(startUrl);
 
     mainWindow.once('ready-to-show', () => {
         mainWindow.show();
@@ -109,19 +109,51 @@ app.on('activate', () => {
 });
 
 // IPC handlers for Server URL management
-const Store = require('electron-store');
-const store = new Store();
+function getConfigPath() {
+    return path.join(app.getPath('userData'), 'config.json');
+}
+
+function loadConfig() {
+    try {
+        const configPath = getConfigPath();
+        if (fs.existsSync(configPath)) {
+            const data = fs.readFileSync(configPath, 'utf-8');
+            return JSON.parse(data);
+        }
+    } catch (error) {
+        console.error("Error loading config:", error);
+    }
+    return {};
+}
+
+function saveConfig(data) {
+    try {
+        const configPath = getConfigPath();
+        const dir = path.dirname(configPath);
+        if (!fs.existsSync(dir)) {
+            fs.mkdirSync(dir, { recursive: true });
+        }
+        fs.writeFileSync(configPath, JSON.stringify(data, null, 2));
+    } catch (error) {
+        console.error("Error saving config:", error);
+    }
+}
 
 ipcMain.handle('get-server-url', async () => {
-    return store.get('serverUrl', null);
+    const config = loadConfig();
+    return config.serverUrl || null;
 });
 
 ipcMain.handle('save-server-url', async (event, url) => {
-    store.set('serverUrl', url);
+    const config = loadConfig();
+    config.serverUrl = url;
+    saveConfig(config);
     return true;
 });
 
 ipcMain.handle('clear-server-url', async () => {
-    store.delete('serverUrl');
+    const config = loadConfig();
+    delete config.serverUrl;
+    saveConfig(config);
     return true;
 });

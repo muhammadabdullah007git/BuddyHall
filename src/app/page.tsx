@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import io from "socket.io-client";
 import styles from "./page.module.css";
@@ -20,26 +20,37 @@ let socket: any;
 
 export default function Dashboard() {
   const router = useRouter();
-  const [serverUrl, setServerUrl] = useState<string>("");
+  const didInit = useRef(false);
+
+  const [serverUrl, setServerUrl] = useState("http://buddyhall.render.com");
   const [isConfiguring, setIsConfiguring] = useState(true);
   const [connectionError, setConnectionError] = useState("");
 
   // Init Server URL
   useEffect(() => {
-    const init = async () => {
-      if (window.electronAPI) {
-        const savedUrl = await window.electronAPI.getServerUrl();
-        if (savedUrl) {
-          setServerUrl(savedUrl);
-          setIsConfiguring(false);
+    if (didInit.current) return;
+    didInit.current = true;
+
+    (async () => {
+      let savedUrl: string | null = null;
+
+      try {
+        if (typeof window !== 'undefined' && window.electronAPI) {
+          savedUrl = await window.electronAPI.getServerUrl();
         }
-      } else {
-        // Fallback for web: use current origin
-        setServerUrl(window.location.origin);
+      } catch (e: any) {
+        console.error(e);
+      }
+
+      if (!savedUrl) {
+        savedUrl = localStorage.getItem("buddyhall_server_url");
+      }
+
+      if (savedUrl) {
+        setServerUrl(savedUrl);
         setIsConfiguring(false);
       }
-    };
-    init();
+    })();
   }, []);
 
   const [formData, setFormData] = useState({
@@ -58,8 +69,8 @@ export default function Dashboard() {
   useEffect(() => {
     if (isConfiguring || !serverUrl) return;
 
-    // Connect to the specific URL
-    socket = io(serverUrl);
+    socket?.disconnect();
+    socket = io(serverUrl, { transports: ["websocket"] });
 
     socket.on("connect_error", () => {
       setConnectionError("Failed to connect to server. Check URL.");
@@ -69,30 +80,19 @@ export default function Dashboard() {
       setConnectionError("");
     });
 
-    socket.on("active-rooms", (rooms: any[]) => {
-      setActiveRooms(rooms);
-    });
+    socket.on("active-rooms", setActiveRooms);
 
-    return () => {
-      socket.disconnect();
-    };
+    return () => socket?.disconnect();
   }, [isConfiguring, serverUrl]);
 
-  const handleServerSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const url = (e.target as any).serverUrl.value;
-    if (window.electronAPI) {
-      await window.electronAPI.saveServerUrl(url);
-    }
-    setServerUrl(url);
-    setIsConfiguring(false);
-  };
 
   const clearServer = async () => {
+    localStorage.removeItem("buddyhall_server_url");
+
     if (window.electronAPI) {
       await window.electronAPI.clearServerUrl();
     }
-    setServerUrl("");
+
     setIsConfiguring(true);
   };
 
@@ -102,7 +102,8 @@ export default function Dashboard() {
     localStorage.setItem(`room_settings_${id}`, JSON.stringify(formData));
 
     // We'll emit create-room when the user actually joins the room as creator
-    router.push(`/room?id=${id}&username=${encodeURIComponent(formData.username)}&creator=true`);
+    // Pass serverUrl so the room page knows where to connect
+    router.push(`/room?id=${id}&username=${encodeURIComponent(formData.username)}&creator=true&serverUrl=${encodeURIComponent(serverUrl)}`);
   };
 
   if (isConfiguring) {
@@ -110,13 +111,33 @@ export default function Dashboard() {
       <main className={styles.container}>
         <div className={`${styles.card} glass`}>
           <h2>Connect to BuddyHall Server</h2>
-          <form onSubmit={handleServerSubmit} className={styles.form}>
+          <div className={styles.form}>
+            {connectionError && <div style={{ color: '#ef4444', marginBottom: '10px' }}>{connectionError}</div>}
             <div className={styles.inputGroup}>
               <label>Server URL</label>
-              <input name="serverUrl" type="url" placeholder="http://buddyhall.render.com" required autoFocus />
+              <input
+                type="url"
+                value={serverUrl}
+                onChange={(e) => setServerUrl(e.target.value)}
+                placeholder="http://buddyhall.render.com"
+                required
+                autoFocus
+              />
             </div>
-            <button type="submit" className={styles.ctaButton}>Connect</button>
-          </form>
+            <button
+              className={styles.ctaButton}
+              onClick={() => {
+                localStorage.setItem("buddyhall_server_url", serverUrl);
+                setIsConfiguring(false);
+
+                if (window.electronAPI) {
+                  window.electronAPI.saveServerUrl(serverUrl).catch(console.error);
+                }
+              }}
+            >
+              Connect
+            </button>
+          </div>
         </div>
       </main>
     );
